@@ -3,22 +3,27 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\SurveyController;
+use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ResponseController;
 
-// Получить список всех опросов
-Route::get('/surveys', [SurveyController::class, 'index']);
+// Регистрация и вход (выдают токен)
+Route::post('/register', [AuthController::class, 'register']);
+Route::post('/login', [AuthController::class, 'login']);
 
-// Получить один конкретный опрос со всеми вопросами
+// Просмотр списка опросов и конкретного опроса доступен всем
+Route::get('/surveys', [SurveyController::class, 'index']);
 Route::get('/surveys/{survey}', [SurveyController::class, 'show']);
 
-// НОВЫЙ МАРШРУТ: Получить статистику/результаты опроса
-Route::get('/surveys/{survey}/results', [SurveyController::class, 'results']);
-
-// Отправить ответы на опрос
-Route::post('/surveys/{survey}/answers', [ResponseController::class, 'store']);
-
-Route::post('/answers', [SurveyController::class, 'storeAnswer']);
-
-Route::get('/user', function (Request $request) {
-    return $request->user();
-})->middleware('auth:sanctum');
+Route::middleware('auth:sanctum')->group(function () {
+    
+    // Получить результаты/аналитику может только авторизованный пользователь
+    Route::get('/surveys/{survey}/results', [SurveyController::class, 'results']);
+    
+    // Отправка ответов теперь тоже под защитой (опционально, зависит от задачи)
+    Route::post('/answers', [SurveyController::class, 'storeAnswer']);
+    
+    // Получить данные текущего юзера
+    Route::get('/user', function (Request $request) {
+        return $request->user();
+    });
+});

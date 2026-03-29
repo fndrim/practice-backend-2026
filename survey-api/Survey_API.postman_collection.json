@@ -1,0 +1,64 @@
+{
+	"info": {
+		"_postman_id": "survey-api-collection",
+		"name": "Survey API Project",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Получить детали опроса",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://127.0.0.1:8000/api/surveys/1",
+					"protocol": "http",
+					"host": ["127", "0", "0", "1"],
+					"port": "8000",
+					"path": ["api", "surveys", "1"]
+				},
+				"description": "Запрос возвращает заголовок опроса и список входящих в него вопросов."
+			}
+		},
+		{
+			"name": "2. Отправить ответ (Создание)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"question_id\": 1,\n    \"answer_text\": \"Ответ отправлен через Postman!\",\n    \"answer_value\": \"excellent\"\n}"
+				},
+				"url": {
+					"raw": "http://127.0.0.1:8000/api/answers",
+					"protocol": "http",
+					"host": ["127", "0", "0", "1"],
+					"port": "8000",
+					"path": ["api", "answers"]
+				},
+				"description": "Эндпоинт для сохранения ответа пользователя в базу данных."
+			}
+		},
+		{
+			"name": "3. Посмотреть результаты аналитики",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://127.0.0.1:8000/api/surveys/1/results",
+					"protocol": "http",
+					"host": ["127", "0", "0", "1"],
+					"port": "8000",
+					"path": ["api", "surveys", "1", "results"]
+				},
+				"description": "Запрос для получения агрегированных данных: количество ответов и тексты всех присланных отзывов."
+			}
+		}
+	]
+}
