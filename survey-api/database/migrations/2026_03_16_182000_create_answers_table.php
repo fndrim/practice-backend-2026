@@ -15,8 +15,9 @@ return new class extends Migration
         $table->id();
         // Связь с вопросом
         $table->foreignId('question_id')->constrained()->onDelete('cascade');
-        $table->text('answer_value'); // Само значение ответа
+        $table->text('answer_value');
         $table->text('answer_text');
+        $table->foreignId('survey_id')->constrained()->onDelete('cascade');
         $table->timestamps();
     });
 }

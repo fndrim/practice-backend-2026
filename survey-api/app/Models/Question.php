@@ -7,7 +7,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Question extends Model
 {
-    // Разрешаем массовое заполнение полей (необходимо для сидеров и API)
     protected $fillable = ['survey_id', 'question_text', 'type'];
 
     /**

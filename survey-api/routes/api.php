@@ -15,11 +15,12 @@ Route::get('/surveys', [SurveyController::class, 'index']);
 Route::get('/surveys/{survey}', [SurveyController::class, 'show']);
 
 Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/surveys', [SurveyController::class, 'store']);
     
     // Получить результаты/аналитику может только авторизованный пользователь
     Route::get('/surveys/{survey}/results', [SurveyController::class, 'results']);
     
-    // Отправка ответов теперь тоже под защитой (опционально, зависит от задачи)
+    // Отправка ответов
     Route::post('/answers', [SurveyController::class, 'storeAnswer']);
     
     // Получить данные текущего юзера
