@@ -13,8 +13,10 @@ return new class extends Migration
 {
     Schema::create('surveys', function (Blueprint $table) {
         $table->id();
-        $table->string('title'); // Название опроса
-        $table->text('description')->nullable(); // Описание (может быть пустым)
+        $table->string('title');
+        $table->text('description')->nullable();
+        $table->enum('status', ['draft', 'published', 'closed'])->default('draft');
+        $table->foreignId('user_id')->constrained()->onDelete('cascade');
         $table->timestamps();
     });
 }

@@ -4,94 +4,148 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Survey;
-use Illuminate\Http\Request;
 use App\Models\Answer;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class SurveyController extends Controller
 {
-    // 1. Получить список всех опросов
+    /**
+     * Посмотреть список всех опубликованных опросов (для всех)
+     */
     public function index()
     {
-        $surveys = Survey::all();
-        return response()->json([
-            'status' => 'success',
-            'data' => $surveys
-        ]);
+        // Респонденты видят только опубликованные опросы
+        $surveys = Survey::where('status', 'published')->with('questions.options')->get();
+        return response()->json($surveys);
     }
 
-    // 2. Получить конкретный опрос со всеми его вопросами
-    public function show(Survey $survey)
+    /**
+     * Создание нового опроса (только для Админа)
+     */
+    public function store(Request $request)
     {
-        // Загружаем связанные вопросы
-        $survey->load('questions');
-        
-        return response()->json([
-            'status' => 'success',
-            'data' => $survey
-        ]);
-    }
-
-    public function store(Request $request) {
+        // Валидация входных данных
         $data = $request->validate([
             'title' => 'required|string',
-            'description' => 'nullable|string'
+            'description' => 'nullable|string',
+            'questions' => 'required|array',
+            'questions.*.text' => 'required|string',
+            'questions.*.type' => 'required|in:text,single,multiple',
+            'questions.*.options' => 'array' 
         ]);
-    
-        // Создаем опрос
-        $survey = Survey::create($data);
-    
-        // Сразу создаем для него тестовый вопрос
-        $survey->questions()->create([
-            'question_text' => 'Как вам наш сервис?',
-            'type' => 'text'
+
+        // Создаем опрос со статусом черновика
+        $survey = Survey::create([
+            'title' => $data['title'],
+            'description' => $data['description'] ?? null,
+            'user_id' => Auth::id(),
+            'status' => 'draft' 
         ]);
-    
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Опрос и вопрос созданы!',
-            'survey' => $survey
-        ], 201);
+
+        // Создаем вопросы и варианты ответов к ним
+        foreach ($data['questions'] as $qData) {
+            $question = $survey->questions()->create([
+                'question_text' => $qData['text'],
+                'type' => $qData['type']
+            ]);
+
+            // Если есть варианты ответа (для single/multiple)
+            if (!empty($qData['options'])) {
+                foreach ($qData['options'] as $optText) {
+                    $question->options()->create(['option_text' => $optText]);
+                }
+            }
+        }
+
+        return response()->json($survey->load('questions.options'), 201);
     }
 
-    public function storeAnswer(Request $request) 
-{
-    $request->validate([
-        'survey_id' => 'required|exists:surveys,id',
-        'answers' => 'required|array',
-    ]);
+    /**
+     * Публикация опроса (только для Админа)
+     */
+    public function publish(Survey $survey)
+    {
+        // Проверяем, что это автор или админ
+        if ($survey->user_id !== Auth::id()) {
+            return response()->json(['message' => 'Это не ваш опрос'], 403);
+        }
 
-    foreach ($request->answers as $answer) {
-        Answer::create([
-            'survey_id' => $request->survey_id,
-            'question_id' => $answer['question_id'],
-            'answer_value' => $answer['answer_text'], 
-            'answer_text' => $answer['answer_text'], 
-        ]);
+        $survey->update(['status' => 'published']);
+        return response()->json(['message' => 'Опрос опубликован и доступен для прохождения']);
     }
 
-    return response()->json(['message' => 'Ответы успешно сохранены!'], 201);
-}
+    /**
+     * Закрытие опроса (только для Админа)
+     */
+    public function close(Survey $survey)
+    {
+        $survey->update(['status' => 'closed']);
+        return response()->json(['message' => 'Опрос закрыт, ответы больше не принимаются']);
+    }
 
-    // Аналитика результатов
+    /**
+     * Сохранение ответов респондента
+     */
+    public function storeAnswer(Request $request)
+    {
+        $request->validate([
+            'survey_id' => 'required|exists:surveys,id',
+            'answers' => 'required|array',
+            'answers.*.question_id' => 'required|exists:questions,id',
+        ]);
+
+        $survey = Survey::findOrFail($request->survey_id);
+
+        // 1. Проверка жизненного цикла: опрос должен быть опубликован
+        if ($survey->status !== 'published') {
+            return response()->json(['error' => 'Опрос недоступен для прохождения'], 403);
+        }
+
+        // 2. Проверка: один респондент — один раз
+        $alreadyPassed = Answer::where('survey_id', $survey->id)
+            ->where('user_id', Auth::id())
+            ->exists();
+        
+        if ($alreadyPassed) {
+            return response()->json(['error' => 'Вы уже проходили этот опрос'], 403);
+        }
+
+        // 3. Сохранение ответов с учетом типов
+        foreach ($request->answers as $ans) {
+            $question = $survey->questions()->find($ans['question_id']);
+            
+            // Если одиночный выбор — проверяем, чтобы был только один вариант
+            if ($question->type === 'single' && is_array($ans['value']) && count($ans['value']) > 1) {
+                return response()->json(['error' => "В вопросе {$question->id} можно выбрать только один вариант"], 422);
+            }
+
+            Answer::create([
+                'survey_id' => $survey->id,
+                'question_id' => $ans['question_id'],
+                'user_id' => Auth::id(),
+                'answer_value' => is_array($ans['value']) ? json_encode($ans['value']) : $ans['value'],
+            ]);
+        }
+
+        return response()->json(['message' => 'Ваши ответы успешно сохранены!'], 201);
+    }
+
+    /**
+     * Просмотр результатов (для автора/админа)
+     */
     public function results(Survey $survey)
     {
-        // Загружаем опрос вместе с вопросами и ВСЕМИ ответами на эти вопросы
+        // Только админ или автор видит аналитику
         $survey->load('questions.answers');
-
         return response()->json([
-            'status' => 'success',
-            'data' => [
-                'survey_title' => $survey->title,
-                'total_responses' => $survey->questions->sum(fn($q) => $q->answers->count()),
-                'results' => $survey->questions->map(function ($question) {
-                    return [
-                        'question' => $question->question_text,
-                        'type' => $question->type,
-                        'answers_count' => $question->answers->count(),
-                        'all_answers' => $question->answers->pluck('answer_text')
-                    ];
-                })
-            ]
+            'survey' => $survey->title,
+            'results' => $survey->questions->map(function($q) {
+                return [
+                    'question' => $q->question_text,
+                    'answers' => $q->answers->pluck('answer_value')
+                ];
+            })
         ]);
     }
 }
